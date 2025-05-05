@@ -43,18 +43,18 @@ db = client["FYP"]
 userCol = db["users"]
 appointmentCol = db["appointments"]
 
-# Suggested doctor mapping
+# Suggested doctor mapping with times
 DOCTOR_DISEASE_MAP = [
-    {"doctor": "Dr. Sam", "disease": "fever"},
-    {"doctor": "Dr. Paul", "disease": "pneumonia"},
-    {"doctor": "Dr. Clara", "disease": "diabetes"},
-    {"doctor": "Dr. Ahmed", "disease": "hypertension"},
-    {"doctor": "Dr. Meera", "disease": "asthma"},
-    {"doctor": "Dr. John", "disease": "migraine"},
-    {"doctor": "Dr. Nina", "disease": "allergy"},
-    {"doctor": "Dr. Rakesh", "disease": "arthritis"},
-    {"doctor": "Dr. Emily", "disease": "anemia"},
-    {"doctor": "Dr. Rahul", "disease": "thyroid"}
+    {"doctor": "Dr. Sam", "disease": "fever", "available_times": ["10:00 AM", "2:00 PM", "4:30 PM"]},
+    {"doctor": "Dr. Paul", "disease": "pneumonia", "available_times": ["9:30 AM", "1:00 PM", "3:45 PM"]},
+    {"doctor": "Dr. Clara", "disease": "diabetes", "available_times": ["11:00 AM", "3:00 PM", "6:00 PM"]},
+    {"doctor": "Dr. Ahmed", "disease": "hypertension", "available_times": ["10:15 AM", "2:30 PM", "5:00 PM"]},
+    {"doctor": "Dr. Meera", "disease": "asthma", "available_times": ["9:00 AM", "12:00 PM", "4:00 PM"]},
+    {"doctor": "Dr. John", "disease": "migraine", "available_times": ["11:30 AM", "1:30 PM", "5:15 PM"]},
+    {"doctor": "Dr. Nina", "disease": "allergy", "available_times": ["8:45 AM", "12:30 PM", "3:30 PM"]},
+    {"doctor": "Dr. Rakesh", "disease": "arthritis", "available_times": ["10:00 AM", "1:15 PM", "4:45 PM"]},
+    {"doctor": "Dr. Emily", "disease": "anemia", "available_times": ["9:15 AM", "11:45 AM", "2:45 PM"]},
+    {"doctor": "Dr. Rahul", "disease": "thyroid", "available_times": ["8:30 AM", "12:15 PM", "3:00 PM"]}
 ]
 
 # Models and tokenizer setup
@@ -133,14 +133,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except InvalidTokenError:
         raise HTTPException(status_code=401)
 
-# Core logic
-
-def append_suggested_doctor(response: str) -> str:
+# Doctor suggestion logic
+def append_suggested_doctor(user_query: str, bot_response: str) -> str:
+    combined_text = f"{user_query.lower()} {bot_response.lower()}"
     for mapping in DOCTOR_DISEASE_MAP:
-        if mapping['disease'].lower() in response.lower():
-            return f"{response}\n\nSuggested Doctor: {mapping['doctor']}"
-    return response
+        if mapping['disease'].lower() in combined_text:
+            times = ", ".join(mapping["available_times"])
+            return f"{bot_response}\n\nSuggested Doctor: {mapping['doctor']}\nAvailable Times: {times}"
+    return bot_response
 
+# Chat with model
 def chat(input_text: str) -> str:
     if tokenizer is None or model is None:
         return "Error: Bot not available."
@@ -156,6 +158,7 @@ def chat(input_text: str) -> str:
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return response.split("Doctor:")[-1].strip()
 
+# Gemini AI response
 def get_gemini_medical_response(user_input: str) -> str:
     try:
         genai.configure(api_key="AIzaSyDoG89hsCX3CN3W3nRJz3ZllA_zq9zSJgw")
@@ -166,6 +169,7 @@ def get_gemini_medical_response(user_input: str) -> str:
     except Exception as e:
         return f"Gemini error: {str(e)}"
 
+# Slot prediction logic
 def get_next_available_slots(doctor_name: str, n=10, interval=15):
     doc_id = label_encoders['doctor_name'].transform([doctor_name])[0]
     doc_data = data[data['doctor_name'] == doc_id]
@@ -181,6 +185,7 @@ def get_next_available_slots(doctor_name: str, n=10, interval=15):
         latest = pred_time + timedelta(minutes=interval)
     return slots
 
+# Booking logic
 def allocate_appointment(doctor_name, patient_name, age, gender, slot, email):
     global data
     if doctor_name not in label_encoders['doctor_name'].classes_:
@@ -220,7 +225,7 @@ def allocate_appointment(doctor_name, patient_name, age, gender, slot, email):
     appointmentCol.insert_one(mongo_doc.copy())
     return jsonable_encoder(mongo_doc)
 
-# API endpoints
+# Routes
 @app.get("/api/health")
 async def health():
     return {"status": "API is running"}
@@ -236,7 +241,8 @@ async def chat_api(chat_request: ChatRequest):
     else:
         res = chat(msg)
         source = "medical_bot"
-    return {"status": "success", "response": append_suggested_doctor(res), "source": source}
+    full_response = append_suggested_doctor(msg, res)
+    return {"status": "success", "response": full_response, "source": source}
 
 @app.post("/signup")
 async def signup(user: User):
