@@ -38,7 +38,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 # MongoDB config
-client = pymongo.MongoClient("mongodb+srv://usamaejaz274:usama876559@cluster0.mklspwo.mongodb.net/")
+client = pymongo.MongoClient("your mongo link")
 db = client["FYP"]
 userCol = db["users"]
 appointmentCol = db["appointments"]
